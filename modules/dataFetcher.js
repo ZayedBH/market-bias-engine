@@ -76,16 +76,115 @@ async function yfFetch(path) {
   }
 }
 
-// ── Price history ─────────────────────────────────────────────────────────────
+// ── Stooq.com fallback — works from cloud IPs, no auth required ──────────────
+// Used when Yahoo Finance blocks the request (datacenter IP detection).
+// Symbol mapping: ETFs/stocks → SYMBOL.US, indices → ^SYMBOL
+// Stooq returns CSV: Date,Open,High,Low,Close,Volume (most recent first)
+const STOOQ_SYMBOL_MAP = {
+  'SPY': 'spy.us', 'QQQ': 'qqq.us', 'IWM': 'iwm.us', 'DIA': 'dia.us',
+  'GLD': 'gld.us', 'SLV': 'slv.us', 'TLT': 'tlt.us', 'IEF': 'ief.us',
+  'HYG': 'hyg.us', 'LQD': 'lqd.us', 'IEI': 'iei.us',
+  'XLK': 'xlk.us', 'XLF': 'xlf.us', 'XLV': 'xlv.us', 'XLE': 'xle.us',
+  'XLI': 'xli.us', 'XLY': 'xly.us', 'XLP': 'xlp.us', 'XLB': 'xlb.us',
+  'XLU': 'xlu.us', 'XLRE': 'xlre.us',
+  'AAPL':'aapl.us','NVDA':'nvda.us','TSLA':'tsla.us','AMZN':'amzn.us',
+  'META':'meta.us','MSFT':'msft.us','GOOGL':'googl.us','SMH':'smh.us',
+  '^VIX': '^vix',      // CBOE VIX 30-day (critical for regime + VRP)
+  '^VIX9D': '^vix9d', // Short-term VIX (may not exist on stooq — will fall through gracefully)
+  '^VIX3M': '^vix3m', // 3-month VIX
+};
+
+// Range string → days count
+function _rangeToDays(range) {
+  const map = { '1d':1,'5d':5,'1mo':30,'3mo':90,'6mo':180,'1y':365,'2y':730,'5y':1826,'10y':3652,'ytd':365 };
+  return map[range] ?? 365;
+}
+
+async function _fetchStooq(symbol, range = '1y') {
+  const stooqSym = STOOQ_SYMBOL_MAP[symbol.toUpperCase()] ?? symbol.toLowerCase().replace('=f','') + '.us';
+  const days     = _rangeToDays(range);
+  const to   = new Date();
+  const from = new Date(Date.now() - days * 86400000);
+  const fmt  = d => d.toISOString().slice(0,10).replace(/-/g,'');
+  const url  = `https://stooq.com/q/d/l/?s=${encodeURIComponent(stooqSym)}&d1=${fmt(from)}&d2=${fmt(to)}&i=d`;
+
+  const res = await httpsGet(url, {
+    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
+    'Accept': 'text/csv,*/*',
+  });
+  if (res.status !== 200) throw new Error(`Stooq ${symbol}: HTTP ${res.status}`);
+
+  const lines = res.body.trim().split('\n').slice(1); // skip header
+  if (!lines.length || lines[0].includes('No data')) throw new Error(`Stooq ${symbol}: no data`);
+
+  const bars = lines
+    .map(line => {
+      const [date, open, high, low, close, volume] = line.split(',');
+      if (!date || !close || isNaN(parseFloat(close))) return null;
+      return {
+        date:     date.trim(),
+        open:     parseFloat(open),
+        high:     parseFloat(high),
+        low:      parseFloat(low),
+        close:    parseFloat(close),
+        volume:   parseFloat(volume) || 0,
+        adjClose: parseFloat(close),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.date.localeCompare(b.date));   // oldest first
+
+  if (!bars.length) throw new Error(`Stooq ${symbol}: empty after parse`);
+  bars._fetchedAt = Date.now();
+  return bars;
+}
+
+// ── Price history — Yahoo Finance with stooq.com fallback ────────────────────
 async function fetchPriceHistory(symbol, range = '1y', interval = '1d') {
+  // Daily interval: try Yahoo Finance first, fall back to stooq on any error.
+  // Stooq only supports daily data so for intraday we must use Yahoo.
+  const isDaily = interval === '1d';
+
+  if (isDaily) {
+    try {
+      const data = await yfFetch(`/v8/finance/chart/${symbol}?interval=${interval}&range=${range}`);
+      const r = data?.chart?.result?.[0];
+      if (!r) throw new Error(`No chart data for ${symbol}`);
+
+      const ts = r.timestamp;
+      const q  = r.indicators.quote[0];
+      const ad = r.indicators.adjclose?.[0]?.adjclose;
+      const bars = ts.map((t, i) => ({
+        date:     new Date(t * 1000).toISOString().slice(0, 10),
+        open:     q.open[i],
+        high:     q.high[i],
+        low:      q.low[i],
+        close:    q.close[i],
+        volume:   q.volume[i],
+        adjClose: ad?.[i] ?? q.close[i],
+      })).filter(r => r.close != null && r.open != null);
+      bars._fetchedAt = Date.now();
+      return bars;
+    } catch (yfErr) {
+      console.warn(`[price] Yahoo Finance failed for ${symbol} (${yfErr.message}) — trying stooq.com`);
+      try {
+        const bars = await _fetchStooq(symbol, range);
+        console.log(`[price] stooq.com OK for ${symbol}: ${bars.length} bars`);
+        return bars;
+      } catch (stooqErr) {
+        console.warn(`[price] stooq.com also failed for ${symbol}: ${stooqErr.message}`);
+        throw new Error(`Price data unavailable for ${symbol} (YF: ${yfErr.message} | stooq: ${stooqErr.message})`);
+      }
+    }
+  }
+
+  // Intraday (5m etc.) — Yahoo Finance only, no stooq fallback
   const data = await yfFetch(`/v8/finance/chart/${symbol}?interval=${interval}&range=${range}`);
   const r = data?.chart?.result?.[0];
   if (!r) throw new Error(`No chart data for ${symbol}`);
-
   const ts = r.timestamp;
   const q  = r.indicators.quote[0];
   const ad = r.indicators.adjclose?.[0]?.adjclose;
-
   const bars = ts.map((t, i) => ({
     date:     new Date(t * 1000).toISOString().slice(0, 10),
     open:     q.open[i],
