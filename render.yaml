@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: market-bias-engine
+    runtime: node
+    buildCommand: npm install
+    startCommand: node --max-http-header-size=131072 server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+    autoDeploy: true

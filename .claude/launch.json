@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "bias-engine",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--max-http-header-size=131072", "server.js"],
+      "port": 3000
+    }
+  ]
+}

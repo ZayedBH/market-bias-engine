@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quant Analytics — Market Bias Engine</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- Nav -->
+  <nav>
+    <a href="/" class="nav-brand">
+      <canvas id="radarLogo" width="28" height="28" aria-hidden="true"></canvas>
+      <span class="brand-text" data-text="BIAS ENGINE">BIAS ENGINE</span>
+    </a>
+    <div class="nav-links">
+      <a href="/">Dashboard</a>
+      <a href="/quant" class="active">Quant</a>
+      <a href="/backtest">Backtest</a>
+    </div>
+    <div class="nav-right">
+      <select id="symbolSelect" style="display:none">
+        <option value="ES=F">ES=F</option><option value="NQ=F">NQ=F</option>
+        <option value="MES=F">MES=F</option><option value="MNQ=F">MNQ=F</option>
+        <option value="RTY=F">RTY=F</option><option value="YM=F">YM=F</option>
+        <option value="SPY">SPY</option><option value="QQQ">QQQ</option>
+        <option value="IWM">IWM</option><option value="AAPL">AAPL</option>
+        <option value="NVDA">NVDA</option><option value="TSLA">TSLA</option>
+        <option value="AMZN">AMZN</option><option value="META">META</option>
+        <option value="MSFT">MSFT</option><option value="GOOGL">GOOGL</option>
+      </select>
+      <div class="ticker-dropdown" id="tickerDropdown">
+        <button class="ticker-btn" id="tickerBtn" type="button">
+          <span id="tickerDisplay">SPY</span>
+          <svg class="ticker-chevron" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4"/></svg>
+        </button>
+        <div class="ticker-menu" id="tickerMenu">
+          <div class="ticker-group">
+            <div class="ticker-group-label">Futures</div>
+            <div class="ticker-option" data-value="ES=F">ES=F · E-mini S&amp;P 500</div>
+            <div class="ticker-option" data-value="NQ=F">NQ=F · E-mini Nasdaq-100</div>
+            <div class="ticker-option" data-value="MES=F">MES=F · Micro E-mini S&amp;P</div>
+            <div class="ticker-option" data-value="MNQ=F">MNQ=F · Micro E-mini NQ</div>
+            <div class="ticker-option" data-value="RTY=F">RTY=F · E-mini Russell</div>
+            <div class="ticker-option" data-value="YM=F">YM=F · E-mini Dow</div>
+          </div>
+          <div class="ticker-group">
+            <div class="ticker-group-label">ETFs</div>
+            <div class="ticker-option" data-value="SPY">SPY</div>
+            <div class="ticker-option" data-value="QQQ">QQQ</div>
+            <div class="ticker-option" data-value="IWM">IWM</div>
+          </div>
+          <div class="ticker-group">
+            <div class="ticker-group-label">Equities</div>
+            <div class="ticker-option" data-value="AAPL">AAPL</div>
+            <div class="ticker-option" data-value="NVDA">NVDA</div>
+            <div class="ticker-option" data-value="TSLA">TSLA</div>
+            <div class="ticker-option" data-value="AMZN">AMZN</div>
+            <div class="ticker-option" data-value="META">META</div>
+            <div class="ticker-option" data-value="MSFT">MSFT</div>
+            <div class="ticker-option" data-value="GOOGL">GOOGL</div>
+          </div>
+        </div>
+      </div>
+      <div class="status-dot" id="statusDot"></div>
+      <span style="font-size:10px;color:var(--muted)" id="lastUpdate">—</span>
+    </div>
+  </nav>
+
+  <!-- Page title bar -->
+  <div style="border-bottom:0.5px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between">
+    <div>
+      <div style="font-size:13px;font-weight:600;letter-spacing:-0.01em">QUANT ANALYTICS</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px">Academic Signal Dashboard — HMM · Hurst · OU · VRP · TSMOM · COT</div>
+    </div>
+    <div style="display:flex;gap:16px;align-items:center">
+      <span id="computedAt" style="font-size:9px;color:var(--muted);font-family:var(--mono)">—</span>
+      <button onclick="loadData()" style="background:var(--panel);border:0.5px solid var(--border);color:var(--text);font-size:10px;padding:5px 12px;border-radius:4px;cursor:pointer;font-family:var(--font)">Refresh</button>
+    </div>
+  </div>
+
+  <!-- Top row: HMM + Hurst + OU Z-Scores -->
+  <div style="border-bottom:0.5px solid var(--border)">
+    <div class="quant-grid">
+
+      <!-- HMM Regime -->
+      <div class="quant-cell">
+        <div class="quant-cell-title">HMM Market Regime</div>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+          <div class="regime-dot" id="qRegimeDot" style="width:10px;height:10px"></div>
+          <div>
+            <div style="font-size:14px;font-weight:700;letter-spacing:0.02em" id="qRegimeName">—</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--muted)" id="qRegimeConf">Conf: —</div>
+          </div>
+        </div>
+        <div id="qRegimeBars" class="regime-bars"></div>
+        <div style="margin-top:10px;border-top:0.5px solid var(--border);padding-top:10px">
+          <div style="font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px">Weight Multipliers (active regime)</div>
+          <div id="qWeightMults" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+        </div>
+      </div>
+
+      <!-- Hurst Exponent -->
+      <div class="quant-cell">
+        <div class="quant-cell-title">Hurst Exponent</div>
+        <div class="quant-metric" style="margin-bottom:14px">
+          <div class="qm-label">Full-sample H (R/S method)</div>
+          <div class="qm-value" id="qHurstH">—</div>
+          <div class="qm-sub" id="qHurstRegime">—</div>
+        </div>
+        <table class="ou-table">
+          <tr><td>H (5d window)</td><td><span class="stat-value" id="qH5d">—</span></td></tr>
+          <tr><td>H (20d window)</td><td><span class="stat-value" id="qH20d">—</span></td></tr>
+          <tr><td>H (60d window)</td><td><span class="stat-value" id="qH60d">—</span></td></tr>
+          <tr><td>Momentum validity</td><td><span class="stat-value" id="qMomValid">—</span></td></tr>
+          <tr><td>Reversion validity</td><td><span class="stat-value" id="qRevValid">—</span></td></tr>
+          <tr><td>Bias adjustment</td><td><span class="stat-value" id="qHurstBias">—</span></td></tr>
+        </table>
+        <div style="margin-top:10px;padding:8px;background:var(--panel);border-radius:4px;font-size:9px;color:var(--muted);line-height:1.6">
+          H&gt;0.6 → trend signals reliable. H&lt;0.4 → mean-reversion regime. Source: Hurst (1951), Peters (1994).
+        </div>
+      </div>
+
+      <!-- OU Z-Scores -->
+      <div class="quant-cell">
+        <div class="quant-cell-title">OU Process Z-Scores</div>
+        <div id="ouScoreList" style="display:flex;flex-direction:column;gap:14px"></div>
+        <div style="margin-top:12px;padding:8px;background:var(--panel);border-radius:4px;font-size:9px;color:var(--muted);line-height:1.6">
+          Avellaneda &amp; Lee (2009): |z| &gt; 1.5 signals mean-reversion trade. Half-life &lt; 30d = tradeable.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Second row: VRP + VIX Term + COT -->
+  <div style="border-bottom:0.5px solid var(--border)">
+    <div class="quant-grid">
+
+      <!-- VRP Dashboard -->
+      <div class="quant-cell">
+        <div class="quant-cell-title">Volatility Risk Premium</div>
+        <div style="display:flex;align-items:flex-end;gap:20px;margin-bottom:14px">
+          <div>
+            <div style="font-size:9px;color:var(--muted);margin-bottom:4px">VRP = IV − RV</div>
+            <div class="vrp-big" id="qVRPval">—</div>
+            <div class="vrp-label" id="qVRPinterp">—</div>
+          </div>
+          <div style="flex:1">
+            <table class="ou-table">
+              <tr><td>Implied Vol (VIX)</td><td><span id="qIV">—</span></td></tr>
+              <tr><td>Realized Vol (YZ 20d)</td><td><span id="qRV">—</span></td></tr>
+              <tr><td>Garman-Klass Vol</td><td><span id="qGK">—</span></td></tr>
+              <tr><td>VRP Z-Score</td><td><span id="qVRPz">—</span></td></tr>
+              <tr><td>Signal</td><td><span id="qVRPsig">—</span></td></tr>
+            </table>
+          </div>
+        </div>
+        <div style="padding:8px;background:var(--panel);border-radius:4px;font-size:9px;color:var(--muted);line-height:1.6">
+          Positive VRP → options overpriced → range/MR likely. Negative VRP → options cheap → breakout likely. Source: Bollerslev et al. (2009).
+        </div>
+      </div>
+
+      <!-- VIX Term Structure -->
+      <div class="quant-cell" style="padding:0">
+        <div style="padding:12px 16px;border-bottom:0.5px solid var(--border)">
+          <div class="quant-cell-title" style="margin-bottom:4px">VIX Term Structure</div>
+          <div style="display:flex;gap:16px">
+            <span style="font-size:10px;color:var(--muted)">VIX9D: <span class="text-bear" style="font-family:var(--mono)" id="qVIX9D">—</span></span>
+            <span style="font-size:10px;color:var(--muted)">VIX: <span style="font-family:var(--mono);color:var(--text)" id="qVIX">—</span></span>
+            <span style="font-size:10px;color:var(--muted)">VIX3M: <span class="text-blue" style="font-family:var(--mono)" id="qVIX3M">—</span></span>
+          </div>
+        </div>
+        <div style="height:180px;padding:0">
+          <canvas id="qVixChart" style="width:100%!important;height:100%!important"></canvas>
+        </div>
+        <div style="padding:8px 16px;display:flex;justify-content:space-between;align-items:center">
+          <span class="stat-badge" id="qVixRegimeBadge" style="font-size:9px">—</span>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">
+            Ratio: <span id="qVixRatio">—</span> · VVIX: <span id="qVVIX">—</span> · SKEW: <span id="qSKEW">—</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- Fear & Greed / Sentiment -->
+      <div class="quant-cell">
+        <div class="quant-cell-title">Macro Sentiment</div>
+        <div class="fg-wrap">
+          <div class="fg-score" id="qFGScore">—</div>
+          <div class="fg-meta">
+            <div class="fg-rating" id="qFGRating">—</div>
+            <div class="fg-change" id="qFGChange">Prev 1D: — · Prev 1W: —</div>
+          </div>
+        </div>
+        <div style="margin-top:8px;border-top:0.5px solid var(--border);padding-top:10px">
+          <div style="font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px">Yield Curve</div>
+          <table class="ou-table">
+            <tr><td>10Y–2Y Spread</td><td><span id="qYieldSpread">—</span></td></tr>
+            <tr><td>Fed Funds Rate</td><td><span id="qFedRate">—</span></td></tr>
+            <tr><td>DXY (Dollar)</td><td><span id="qDXY">—</span></td></tr>
+          </table>
+        </div>
+        <div style="margin-top:10px;padding:8px;background:var(--panel);border-radius:4px;font-size:9px;color:var(--muted);line-height:1.6">
+          CNN Fear &amp; Greed Index: 0–24 Extreme Fear → contrarian bullish signal. 75–100 Greed → contrarian bearish.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Third row: TSMOM + Cross-Asset + OFI -->
+  <div style="border-bottom:0.5px solid var(--border)">
+    <div class="quant-grid">
+
+      <!-- TSMOM Multi-Lookback -->
+      <div class="quant-cell">
+        <div class="quant-cell-title">Time-Series Momentum (TSMOM)</div>
+        <div style="margin-bottom:10px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <div style="font-family:var(--mono);font-size:20px;font-weight:700" id="qTSMOMScore">—</div>
+            <div>
+              <div style="font-size:10px;color:var(--muted)" id="qTSMOMConf">Confidence: —</div>
+              <div style="font-size:9px;color:var(--muted2)" id="qTSMOMAgree">—</div>
+            </div>
+          </div>
+          <div class="tsmom-grid" id="qTSMOMGrid"></div>
+        </div>
+        <div style="padding:8px;background:var(--panel);border-radius:4px;font-size:9px;color:var(--muted);line-height:1.6">
+          Moskowitz, Ooi &amp; Pedersen (2012): TSMOM buys assets with positive 12M return (skip 1M). Spans 58 liquid instruments, 1985–2009. Works across all asset classes.
+        </div>
+      </div>
+
+      <!-- Cross-Asset Momentum Matrix -->
+      <div class="quant-cell">
+        <div class="quant-cell-title">Cross-Asset Momentum Matrix</div>
+        <div style="margin-bottom:12px;display:flex;align-items:center;gap:12px">
+          <div>
+            <div style="font-size:9px;color:var(--muted)">Risk-On Score</div>
+            <div style="font-family:var(--mono);font-size:18px;font-weight:700" id="qRiskOnScore">—</div>
+          </div>
+          <div style="font-size:18px;color:var(--muted)">—</div>
+          <div>
+            <div style="font-size:9px;color:var(--muted)">Risk-Off Score</div>
+            <div style="font-family:var(--mono);font-size:18px;font-weight:700" id="qRiskOffScore">—</div>
+          </div>
+          <div style="margin-left:auto;text-align:right">
+            <div style="font-size:9px;color:var(--muted)">Regime</div>
+            <div style="font-size:12px;font-weight:700" id="qCrossRegime">—</div>
+          </div>
+        </div>
+        <div class="asset-grid" id="qAssetGrid"></div>
+      </div>
+
+      <!-- Order Flow Imbalance + Intraday -->
+      <div class="quant-cell">
+        <div class="quant-cell-title">Order Flow Imbalance</div>
+        <div style="margin-bottom:12px">
+          <div style="display:flex;align-items:flex-end;gap:16px;margin-bottom:10px">
+            <div>
+              <div style="font-size:9px;color:var(--muted)">OFI (14d proxy)</div>
+              <div style="font-family:var(--mono);font-size:24px;font-weight:700" id="qOFIval">—</div>
+            </div>
+            <div>
+              <div style="font-size:9px;color:var(--muted)">Z-Score</div>
+              <div style="font-family:var(--mono);font-size:18px;font-weight:600" id="qOFIz">—</div>
+            </div>
+          </div>
+          <div style="padding:6px 10px;border-radius:4px;display:inline-block;font-size:10px;font-weight:600" id="qOFIinterp"></div>
+        </div>
+
+        <div style="border-top:0.5px solid var(--border);padding-top:10px;margin-top:4px">
+          <div style="font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px">Intraday Momentum (Gao et al. 2018)</div>
+          <table class="ou-table">
+            <tr><td>Signal Type</td><td><span id="qIntradayType">—</span></td></tr>
+            <tr><td>Gap Return</td><td><span id="qGapRet">—</span></td></tr>
+            <tr><td>Intraday Ret</td><td><span id="qIntradayRet">—</span></td></tr>
+            <tr><td>Volume Ratio</td><td><span id="qVolRatio">—</span></td></tr>
+          </table>
+        </div>
+
+        <div style="margin-top:10px;padding:8px;background:var(--panel);border-radius:4px;font-size:9px;color:var(--muted);line-height:1.6">
+          Cont et al. (2010): OFI explains 60–70% of short-term price variance. Volume proxy: up-vol/(up-vol+down-vol).
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- COT + Sentiment row -->
+  <div style="border-bottom:0.5px solid var(--border)">
+    <div class="quant-grid">
+
+      <!-- COT Positioning -->
+      <div class="quant-cell">
+        <div class="quant-cell-title">CFTC COT Positioning (E-mini S&amp;P)</div>
+        <div style="display:flex;align-items:flex-end;gap:20px;margin-bottom:14px">
+          <div>
+            <div style="font-size:9px;color:var(--muted);margin-bottom:4px">COT Index (3yr rolling)</div>
+            <div style="font-family:var(--mono);font-size:32px;font-weight:700" id="qCOTIndex">—</div>
+            <div style="font-size:11px;font-weight:600;margin-top:4px" id="qCOTLabel">—</div>
+          </div>
+          <div style="flex:1">
+            <table class="ou-table">
+              <tr><td>Net Spec Position</td><td><span id="qCOTNetSpec">—</span></td></tr>
+              <tr><td>Net Comm Position</td><td><span id="qCOTNetComm">—</span></td></tr>
+              <tr><td>4-Week Change</td><td><span id="qCOTPosChange">—</span></td></tr>
+              <tr><td>Signal</td><td><span id="qCOTSignal">—</span></td></tr>
+              <tr><td>Latest Date</td><td><span id="qCOTDate">—</span></td></tr>
+            </table>
+          </div>
+        </div>
+        <div id="qCOTRows" style="margin-bottom:10px;overflow-x:auto">
+          <table class="signal-table" style="width:100%;font-size:9px">
+            <thead><tr><th>Date</th><th>Net Spec</th><th>Net Comm</th></tr></thead>
+            <tbody id="qCOTRowsBody"></tbody>
+          </table>
+        </div>
+        <div style="padding:8px;background:var(--panel);border-radius:4px;font-size:9px;color:var(--muted);line-height:1.6">
+          COT Index &gt;85% = extreme spec long = contrarian bearish. &lt;15% = extreme spec short = contrarian bullish. Source: CFTC TFF report, Bessembinder &amp; Seguin (1992).
+        </div>
+      </div>
+
+      <!-- AAII + FINRA Sentiment -->
+      <div class="quant-cell">
+        <div class="quant-cell-title">Investor Sentiment</div>
+
+        <!-- AAII -->
+        <div style="margin-bottom:14px">
+          <div style="font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px">AAII Sentiment Survey</div>
+          <div style="display:flex;gap:16px;margin-bottom:8px">
+            <div style="text-align:center">
+              <div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--bull)" id="qAAIIBull">—</div>
+              <div style="font-size:9px;color:var(--muted)">Bullish</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--muted)" id="qAAIINeutral">—</div>
+              <div style="font-size:9px;color:var(--muted)">Neutral</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--bear)" id="qAAIIBear">—</div>
+              <div style="font-size:9px;color:var(--muted)">Bearish</div>
+            </div>
+            <div style="text-align:center;margin-left:auto">
+              <div style="font-family:var(--mono);font-size:20px;font-weight:700" id="qAAIISpread">—</div>
+              <div style="font-size:9px;color:var(--muted)">Bull−Bear</div>
+            </div>
+          </div>
+          <div style="font-size:10px;font-weight:600" id="qAAIISignal">—</div>
+        </div>
+
+        <!-- FINRA Short Vol -->
+        <div style="border-top:0.5px solid var(--border);padding-top:10px">
+          <div style="font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px">FINRA RegSHO Short Volume</div>
+          <table class="ou-table">
+            <tr><td>Short Ratio (latest)</td><td><span id="qFINRAShortRatio">—</span></td></tr>
+            <tr><td>Short Ratio (5d avg)</td><td><span id="qFINRAAvg5d">—</span></td></tr>
+            <tr><td>5d Change</td><td><span id="qFINRAChg">—</span></td></tr>
+            <tr><td>Signal</td><td><span id="qFINRASignal">—</span></td></tr>
+          </table>
+        </div>
+      </div>
+
+      <!-- CNN F&G + Alerts -->
+      <div class="quant-cell">
+        <div class="quant-cell-title">CNN Fear &amp; Greed + Alert Log</div>
+
+        <!-- CNN F&G big number -->
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px">
+          <div>
+            <div style="font-size:9px;color:var(--muted);margin-bottom:4px">CNN Fear &amp; Greed</div>
+            <div style="font-family:var(--mono);font-size:36px;font-weight:700" id="qCNNFG">—</div>
+          </div>
+          <div>
+            <div style="font-size:12px;font-weight:600" id="qCNNRating">—</div>
+            <div style="font-size:9px;color:var(--muted);margin-top:4px">Prev 1D: <span id="qCNNPrev1d">—</span></div>
+            <div style="font-size:9px;color:var(--muted)">Prev 1W: <span id="qCNNPrev1w">—</span></div>
+          </div>
+        </div>
+
+        <!-- Alert log -->
+        <div style="border-top:0.5px solid var(--border);padding-top:10px">
+          <div style="font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px">Recent Alerts</div>
+          <div id="qAlertsList" style="max-height:160px;overflow-y:auto">
+            <div style="color:var(--muted);font-size:10px">No alerts yet</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Breadth + Credit Spread + Return Distribution row -->
+  <div style="border-bottom:0.5px solid var(--border)">
+    <div class="quant-grid">
+
+      <!-- Sector Breadth -->
+      <div class="quant-cell">
+        <div class="quant-cell-title">Market Breadth — Sector ETFs</div>
+        <div style="display:flex;align-items:flex-end;gap:20px;margin-bottom:12px">
+          <div>
+            <div style="font-size:9px;color:var(--muted);margin-bottom:4px">Weighted Breadth %</div>
+            <div style="font-family:var(--mono);font-size:28px;font-weight:700" id="qBreadthPct">—</div>
+            <div style="font-size:10px;font-weight:600;margin-top:3px" id="qBreadthRegime">—</div>
+          </div>
+          <div style="flex:1">
+            <table class="ou-table">
+              <tr><td>Above 20d EMA</td><td><span id="qB20">—</span></td></tr>
+              <tr><td>Above 50d EMA</td><td><span id="qB50">—</span></td></tr>
+              <tr><td>Above 200d EMA</td><td><span id="qB200">—</span></td></tr>
+            </table>
+          </div>
+        </div>
+        <!-- Sector grid: 11 sectors 4 per row -->
+        <div id="qSectorGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:10px"></div>
+        <div style="padding:8px;background:var(--panel);border-radius:4px;font-size:9px;color:var(--muted);line-height:1.6">
+          Breadth above 75% = broad bull; below 25% = broad bear. 20d (25%) · 50d (35%) · 200d (40%) weighted composite.
+        </div>
+      </div>
+
+      <!-- Credit Spread -->
+      <div class="quant-cell">
+        <div class="quant-cell-title">Credit Spread Proxy (HYG / IEI)</div>
+        <div style="display:flex;align-items:flex-end;gap:20px;margin-bottom:14px">
+          <div>
+            <div style="font-size:9px;color:var(--muted);margin-bottom:4px">HYG/IEI Z-Score</div>
+            <div style="font-family:var(--mono);font-size:32px;font-weight:700" id="qCSZscore">—</div>
+            <div style="font-size:10px;font-weight:600;margin-top:4px" id="qCSSignal">—</div>
+          </div>
+          <div style="flex:1">
+            <table class="ou-table">
+              <tr><td>Signal Score</td><td><span id="qCSScore">—</span></td></tr>
+              <tr><td>20d Trend</td><td><span id="qCSTrend">—</span></td></tr>
+              <tr><td>Interpretation</td><td><span id="qCSInterp">—</span></td></tr>
+            </table>
+          </div>
+        </div>
+        <div style="padding:8px;background:var(--panel);border-radius:4px;font-size:9px;color:var(--muted);line-height:1.6">
+          HYG = High Yield Corp Bond ETF · IEI = 3-7yr Treasury ETF. Rising ratio = tightening spreads = risk-on. Z-score vs 252d rolling mean.
+        </div>
+        <div style="margin-top:10px;border-top:0.5px solid var(--border);padding-top:10px">
+          <div style="font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px">Volume Profile (60d)</div>
+          <table class="ou-table">
+            <tr><td>VPOC</td><td><span id="qVPOC">—</span></td></tr>
+            <tr><td>Value Area High</td><td><span id="qVAH">—</span></td></tr>
+            <tr><td>Value Area Low</td><td><span id="qVAL">—</span></td></tr>
+            <tr><td>Spot vs VPOC</td><td><span id="qVPOCDist">—</span></td></tr>
+            <tr><td>Status</td><td><span id="qVPOCStatus">—</span></td></tr>
+          </table>
+        </div>
+      </div>
+
+      <!-- Return Distribution -->
+      <div class="quant-cell">
+        <div class="quant-cell-title">Return Distribution Statistics</div>
+        <div style="display:flex;gap:20px;margin-bottom:12px">
+          <div style="flex:1">
+            <div style="font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px">Risk-Adjusted Returns</div>
+            <table class="ou-table">
+              <tr><td>Ann. Return</td><td><span id="qDistRet">—</span></td></tr>
+              <tr><td>Ann. Vol</td><td><span id="qDistVol">—</span></td></tr>
+              <tr><td>Sharpe Ratio</td><td><span id="qSharpe">—</span></td></tr>
+              <tr><td>Sortino Ratio</td><td><span id="qSortino">—</span></td></tr>
+              <tr><td>Calmar Ratio</td><td><span id="qCalmar">—</span></td></tr>
+              <tr><td>Omega Ratio</td><td><span id="qOmega">—</span></td></tr>
+            </table>
+          </div>
+        </div>
+        <div style="border-top:0.5px solid var(--border);padding-top:10px;margin-top:2px">
+          <div style="font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px">Tail Risk (252d)</div>
+          <table class="ou-table">
+            <tr><td>Skewness</td><td><span id="qSkew">—</span></td></tr>
+            <tr><td>Excess Kurtosis</td><td><span id="qKurt">—</span></td></tr>
+            <tr><td>Daily VaR 95%</td><td><span id="qVar95">—</span></td></tr>
+            <tr><td>Daily VaR 99%</td><td><span id="qVar99">—</span></td></tr>
+            <tr><td>CVaR 95% (ES)</td><td><span id="qCVar95">—</span></td></tr>
+            <tr><td>Max Drawdown</td><td><span id="qMaxDD">—</span></td></tr>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Volume Profile + Vol Surface row -->
+  <div style="border-bottom:0.5px solid var(--border)">
+    <div class="quant-grid">
+
+      <!-- Volume Profile chart -->
+      <div class="quant-cell">
+        <div class="quant-cell-title">Volume Profile (60d VPOC)</div>
+        <div style="height:280px">
+          <canvas id="qVolProfileChart" style="width:100%!important;height:100%!important"></canvas>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:8px;font-size:9px;font-family:var(--mono)">
+          <span style="color:var(--bear)">▸ VAL <span id="qVALLabel">—</span></span>
+          <span style="color:#fbbf24">▸ VPOC <span id="qVPOCLabel">—</span></span>
+          <span style="color:var(--bull)">▸ VAH <span id="qVAHLabel">—</span></span>
+          <span style="color:var(--muted)">· Spot <span id="qSpotLabel">—</span></span>
+        </div>
+      </div>
+
+      <!-- Vol Surface heatmap (spans 2 cols) -->
+      <div class="quant-cell" style="grid-column:span 2;border-right:none">
+        <div class="quant-cell-title">Implied Volatility Surface — Strike × Expiration</div>
+        <div style="font-size:9px;color:var(--muted);margin-bottom:8px">Mid-IV across strikes and expirations. Green=low IV, Red=high IV. ATM column highlighted.</div>
+        <div id="qVolSurface" style="overflow-x:auto">
+          <div style="color:var(--muted);font-size:10px">Loading vol surface…</div>
+        </div>
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:center;font-size:9px;color:var(--muted)">
+          <span style="display:inline-block;width:10px;height:10px;background:#1d4ed8;border-radius:2px"></span>Low IV
+          <span style="display:inline-block;width:10px;height:10px;background:#047857;border-radius:2px;margin-left:6px"></span>Med-Low
+          <span style="display:inline-block;width:10px;height:10px;background:#d97706;border-radius:2px;margin-left:6px"></span>Med-High
+          <span style="display:inline-block;width:10px;height:10px;background:#dc2626;border-radius:2px;margin-left:6px"></span>High IV
+          <span style="margin-left:10px">ATM = ±5% moneyness. Source: Options chain via Yahoo Finance.</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Bottom row: Kelly + full signal table -->
+  <div>
+    <div class="quant-grid">
+
+      <!-- Kelly Sizing -->
+      <div class="quant-cell">
+        <div class="quant-cell-title">Kelly Position Sizing</div>
+        <div style="margin-bottom:14px">
+          <div style="font-size:9px;color:var(--muted);margin-bottom:4px">Bias-adjusted half-Kelly (MacLean, Ziemba &amp; Blazenko 1992)</div>
+          <div style="display:flex;align-items:baseline;gap:8px">
+            <div style="font-family:var(--mono);font-size:32px;font-weight:700" id="qKellyRisk">—</div>
+            <div style="font-size:10px;color:var(--muted)">recommended risk</div>
+          </div>
+        </div>
+        <table class="ou-table" style="margin-bottom:12px">
+          <tr><td>Direction</td><td><span id="qKellyDir">—</span></td></tr>
+          <tr><td>Win Probability</td><td><span id="qKellyWP">—</span></td></tr>
+          <tr><td>Full Kelly</td><td><span id="qKellyFull">—</span></td></tr>
+          <tr><td>Half Kelly</td><td><span id="qKellyHalf">—</span></td></tr>
+          <tr><td>Vol Scalar</td><td><span id="qKellyVS">—</span></td></tr>
+        </table>
+        <div style="padding:8px;background:var(--panel);border-radius:4px;font-size:9px;color:var(--muted);line-height:1.6" id="qKellyRationale">—</div>
+      </div>
+
+      <!-- Bootstrap CI -->
+      <div class="quant-cell">
+        <div class="quant-cell-title">Bootstrap Confidence Interval (n=1000)</div>
+        <div style="margin-bottom:14px">
+          <div style="font-size:9px;color:var(--muted);margin-bottom:4px">90% CI bounds via random signal subsampling</div>
+          <div style="display:flex;align-items:center;gap:12px;font-family:var(--mono)">
+            <span style="font-size:14px;color:var(--muted)" id="qCILow">—</span>
+            <div style="flex:1;height:6px;background:var(--border);border-radius:3px;position:relative;overflow:hidden">
+              <div id="qCIBar" style="position:absolute;top:0;height:100%;background:var(--bull);border-radius:3px;transition:left .4s,width .4s"></div>
+            </div>
+            <span style="font-size:14px;color:var(--muted)" id="qCIHigh">—</span>
+          </div>
+          <div style="text-align:center;margin-top:6px">
+            <span style="font-family:var(--mono);font-size:24px;font-weight:700" id="qComposite">—</span>
+            <span style="font-size:10px;color:var(--muted);margin-left:6px">composite</span>
+          </div>
+        </div>
+        <table class="ou-table">
+          <tr><td>Confidence</td><td><span id="qConfidence">—</span></td></tr>
+          <tr><td>CI Low (5th pct)</td><td><span id="qCI5">—</span></td></tr>
+          <tr><td>CI High (95th pct)</td><td><span id="qCI95">—</span></td></tr>
+          <tr><td>CI Width</td><td><span id="qCIWidth">—</span></td></tr>
+          <tr><td>Signals Fired</td><td><span id="qSigFired">—</span></td></tr>
+          <tr><td>Label</td><td><span id="qBiasLabel">—</span></td></tr>
+        </table>
+      </div>
+
+      <!-- Correlation Matrix -->
+      <div class="quant-cell">
+        <div class="quant-cell-title">60d Pairwise Correlation Matrix</div>
+        <div style="font-size:9px;color:var(--muted);margin-bottom:8px">Log-return correlations across key assets. Blue=negative, Red=positive correlation.</div>
+        <div id="qCorrMatrix" style="overflow-x:auto">
+          <div style="color:var(--muted);font-size:10px">Loading…</div>
+        </div>
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:center;font-size:9px;color:var(--muted)">
+          <span style="display:inline-block;width:10px;height:10px;background:#1d4ed8;border-radius:2px"></span>−1.0
+          <span style="display:inline-block;width:10px;height:10px;background:#27272a;border-radius:2px;margin-left:4px"></span>0.0
+          <span style="display:inline-block;width:10px;height:10px;background:#dc2626;border-radius:2px;margin-left:4px"></span>+1.0
+          <span style="margin-left:8px">Ledoit &amp; Wolf (2004)</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+<canvas id="ambientCanvas" aria-hidden="true"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="/js/gauge.js"></script>
+<script src="/js/logo.js"></script>
+<script src="/js/ticker.js"></script>
+<script src="/js/quant.js"></script>
+<!-- SPA router: enables instant tab switching without full page reloads -->
+<script src="/js/router.js"></script>
+</body>
+</html>

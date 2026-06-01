@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Signal Backtester — Market Bias Engine</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="app">
+
+  <!-- Nav -->
+  <nav>
+    <a href="/" class="nav-brand">
+      <canvas id="radarLogo" width="28" height="28" aria-hidden="true"></canvas>
+      <span class="brand-text" data-text="BIAS ENGINE">BIAS ENGINE</span>
+    </a>
+    <div class="nav-links">
+      <a href="/">Dashboard</a>
+      <a href="/quant">Quant</a>
+      <a href="/backtest" class="active">Backtest</a>
+    </div>
+    <div class="nav-right">
+      <select id="symbolSelect" style="display:none">
+        <option value="ES=F">ES=F</option><option value="NQ=F">NQ=F</option>
+        <option value="MES=F">MES=F</option><option value="MNQ=F">MNQ=F</option>
+        <option value="RTY=F">RTY=F</option><option value="YM=F">YM=F</option>
+        <option value="SPY">SPY</option><option value="QQQ">QQQ</option>
+        <option value="IWM">IWM</option><option value="AAPL">AAPL</option>
+        <option value="NVDA">NVDA</option><option value="TSLA">TSLA</option>
+        <option value="AMZN">AMZN</option><option value="META">META</option>
+        <option value="MSFT">MSFT</option><option value="GOOGL">GOOGL</option>
+      </select>
+      <div class="ticker-dropdown" id="tickerDropdown">
+        <button class="ticker-btn" id="tickerBtn" type="button">
+          <span id="tickerDisplay">SPY</span>
+          <svg class="ticker-chevron" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4"/></svg>
+        </button>
+        <div class="ticker-menu" id="tickerMenu">
+          <div class="ticker-group">
+            <div class="ticker-group-label">Futures</div>
+            <div class="ticker-option" data-value="ES=F">ES=F · E-mini S&amp;P 500</div>
+            <div class="ticker-option" data-value="NQ=F">NQ=F · E-mini Nasdaq-100</div>
+            <div class="ticker-option" data-value="MES=F">MES=F · Micro E-mini S&amp;P</div>
+            <div class="ticker-option" data-value="MNQ=F">MNQ=F · Micro E-mini NQ</div>
+            <div class="ticker-option" data-value="RTY=F">RTY=F · E-mini Russell</div>
+            <div class="ticker-option" data-value="YM=F">YM=F · E-mini Dow</div>
+          </div>
+          <div class="ticker-group">
+            <div class="ticker-group-label">ETFs</div>
+            <div class="ticker-option" data-value="SPY">SPY</div>
+            <div class="ticker-option" data-value="QQQ">QQQ</div>
+            <div class="ticker-option" data-value="IWM">IWM</div>
+          </div>
+          <div class="ticker-group">
+            <div class="ticker-group-label">Equities</div>
+            <div class="ticker-option" data-value="AAPL">AAPL</div>
+            <div class="ticker-option" data-value="NVDA">NVDA</div>
+            <div class="ticker-option" data-value="TSLA">TSLA</div>
+            <div class="ticker-option" data-value="AMZN">AMZN</div>
+            <div class="ticker-option" data-value="META">META</div>
+            <div class="ticker-option" data-value="MSFT">MSFT</div>
+            <div class="ticker-option" data-value="GOOGL">GOOGL</div>
+          </div>
+        </div>
+      </div>
+      <select class="ticker-select" id="lookbackSelect" style="width:80px">
+        <option value="20">20d</option>
+        <option value="30" selected>30d</option>
+        <option value="60">60d</option>
+        <option value="90">90d</option>
+      </select>
+      <div class="status-dot" id="statusDot"></div>
+      <span style="font-size:10px;color:var(--muted)" id="lastUpdate">—</span>
+    </div>
+  </nav>
+
+  <!-- Title bar -->
+  <div style="border-bottom:0.5px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between">
+    <div>
+      <div style="font-size:13px;font-weight:600;letter-spacing:-0.01em">SIGNAL ACCURACY BACKTESTER</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px">Price-signal walk-forward · EMA Stack + TSMOM + OFI + PDH/PDL + Hurst · No look-ahead bias</div>
+    </div>
+    <div style="display:flex;gap:16px;align-items:center">
+      <span id="computedAt" style="font-size:9px;color:var(--muted);font-family:var(--mono)">—</span>
+      <button onclick="loadData()" style="background:var(--panel);border:0.5px solid var(--border);color:var(--text);font-size:10px;padding:5px 12px;border-radius:4px;cursor:pointer;font-family:var(--font)">Run Backtest</button>
+    </div>
+  </div>
+
+  <!-- Summary stats row -->
+  <div style="display:flex;gap:0;border-bottom:0.5px solid var(--border)">
+    <div class="bt-stat" id="btAccuracy">—</div>
+    <div class="bt-stat" id="btIC">—</div>
+    <div class="bt-stat" id="btPF">—</div>
+    <div class="bt-stat" id="btBull">—</div>
+    <div class="bt-stat" id="btBear">—</div>
+    <div class="bt-stat" id="btDays">—</div>
+  </div>
+
+  <!-- Charts row -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;border-bottom:0.5px solid var(--border)">
+    <!-- Signal vs Return scatter / bar chart -->
+    <div style="padding:16px;border-right:0.5px solid var(--border)">
+      <div style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:12px">Daily Signal Score vs Next-Day Return (bps)</div>
+      <div style="height:220px;position:relative"><canvas id="sigRetChart"></canvas></div>
+    </div>
+    <!-- Rolling accuracy -->
+    <div style="padding:16px">
+      <div style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:12px">Rolling 10-Day Accuracy (%)</div>
+      <div style="height:220px;position:relative"><canvas id="rollingAccChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Day-by-day results table + signal decomposition -->
+  <div style="display:grid;grid-template-columns:2fr 1fr">
+    <!-- Results table -->
+    <div style="border-right:0.5px solid var(--border)">
+      <div style="padding:10px 16px;border-bottom:0.5px solid var(--border);font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.07em">Day-by-Day Results</div>
+      <div id="btTable" style="overflow-y:auto;max-height:420px">
+        <table class="signal-table" style="width:100%">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Signal</th>
+              <th>Direction</th>
+              <th>Next Return</th>
+              <th>Actual</th>
+              <th>Result</th>
+            </tr>
+          </thead>
+          <tbody id="btTableBody">
+            <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Signal component breakdown + alerts -->
+    <div>
+      <div style="padding:10px 16px;border-bottom:0.5px solid var(--border);font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.07em">Signal Weights Used</div>
+      <div id="btWeights" style="padding:16px"></div>
+      <div style="padding:10px 16px;border-top:0.5px solid var(--border);border-bottom:0.5px solid var(--border);font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.07em">Recent Alerts</div>
+      <div id="alertsList" style="padding:12px;overflow-y:auto;max-height:200px"></div>
+    </div>
+  </div>
+
+</div><!-- /app -->
+
+<style>
+.bt-stat {
+  flex:1;
+  padding:14px 16px;
+  border-right:0.5px solid var(--border);
+  text-align:center;
+}
+.bt-stat:last-child { border-right:none; }
+.bt-stat-value {
+  font-family:var(--mono);
+  font-size:22px;
+  font-weight:700;
+  letter-spacing:-0.02em;
+  margin-bottom:3px;
+}
+.bt-stat-label {
+  font-size:9px;
+  color:var(--muted2);
+  text-transform:uppercase;
+  letter-spacing:0.07em;
+}
+.result-correct { color:var(--bull); font-weight:600; }
+.result-wrong   { color:var(--bear); font-weight:600; }
+.result-skip    { color:var(--muted); }
+.alert-item {
+  padding:7px 0;
+  border-bottom:0.5px solid var(--border);
+  font-size:10px;
+}
+.alert-item:last-child { border-bottom:none; }
+.alert-HIGH   { color:var(--bear); }
+.alert-MEDIUM { color:#fbbf24; }
+.alert-LOW    { color:var(--muted); }
+</style>
+
+<script>
+'use strict';
+
+const $ = id => document.getElementById(id);
+const fmt  = (v, d=2) => v != null ? Number(v).toFixed(d) : '—';
+const sign  = (v, d=1) => v != null ? (v >= 0 ? `+${fmt(v,d)}` : fmt(v,d)) : '—';
+
+let sigRetChartInst = null, rollingAccInst = null;
+
+function setStatus(ok) {
+  const dot = $('statusDot');
+  if (dot) dot.className = ok ? 'status-dot live' : 'status-dot';
+}
+
+function statBlock(el, value, label, color = null) {
+  if (!el) return;
+  el.innerHTML = `
+    <div class="bt-stat-value" style="${color ? `color:${color}` : ''}">${value}</div>
+    <div class="bt-stat-label">${label}</div>`;
+}
+
+function dirArrow(d) {
+  return d > 0 ? '▲' : d < 0 ? '▼' : '—';
+}
+function dirColor(d) {
+  return d > 0 ? 'var(--bull)' : d < 0 ? 'var(--bear)' : 'var(--muted)';
+}
+
+function renderStats(bt) {
+  const accColor = bt.accuracy >= 55 ? 'var(--bull)' : bt.accuracy < 45 ? 'var(--bear)' : 'var(--neutral)';
+  const icColor  = bt.ic > 0.1 ? 'var(--bull)' : bt.ic < -0.1 ? 'var(--bear)' : 'var(--neutral)';
+  const pfColor  = bt.profitFactor > 1.1 ? 'var(--bull)' : bt.profitFactor < 0.9 ? 'var(--bear)' : 'var(--neutral)';
+
+  statBlock($('btAccuracy'), `${fmt(bt.accuracy,1)}%`, `Directional Accuracy (${bt.decidedDays}d)`, accColor);
+  statBlock($('btIC'),       fmt(bt.ic,3),              `Information Coefficient`, icColor);
+  statBlock($('btPF'),       fmt(bt.profitFactor,2),    `Profit Factor`, pfColor);
+  statBlock($('btBull'), `${sign(bt.avgBullRetBps,0)} bps`, `Avg Bull-Signal Return`);
+  statBlock($('btBear'), `${sign(bt.avgBearRetBps,0)} bps`, `Avg Bear-Signal Return`);
+  statBlock($('btDays'), `${bt.totalDays}d / ${bt.skippedDays} skip`, `Backtest Period`);
+}
+
+function renderTable(results) {
+  const tbody = $('btTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = [...results].reverse().map(r => {
+    const retStr  = `${sign(r.nextRetBps,0)} bps`;
+    const retCol  = r.nextRetBps > 0 ? 'var(--bull)' : r.nextRetBps < 0 ? 'var(--bear)' : 'var(--muted)';
+    const resStr  = r.skipped ? 'SKIP' : r.correct ? 'CORRECT' : 'WRONG';
+    const resCls  = r.skipped ? 'result-skip' : r.correct ? 'result-correct' : 'result-wrong';
+    return `<tr>
+      <td style="font-family:var(--mono);font-size:10px">${r.date}</td>
+      <td style="font-family:var(--mono);color:${r.signalScore > 0 ? 'var(--bull)' : r.signalScore < 0 ? 'var(--bear)' : 'var(--muted)'}">${sign(r.signalScore,1)}</td>
+      <td style="color:${dirColor(r.signalDir)}">${dirArrow(r.signalDir)}</td>
+      <td style="font-family:var(--mono);color:${retCol}">${retStr}</td>
+      <td style="color:${dirColor(r.actualDir)}">${dirArrow(r.actualDir)}</td>
+      <td class="${resCls}">${resStr}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderWeights(weights) {
+  const el = $('btWeights');
+  if (!el || !weights) return;
+  el.innerHTML = Object.entries(weights).map(([k, w]) => `
+    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid var(--border)">
+      <span style="font-size:11px;color:var(--text);text-transform:capitalize">${k}</span>
+      <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">${(w * 100).toFixed(0)}%</span>
+    </div>`).join('');
+}
+
+function renderSigRetChart(results) {
+  const canvas = $('sigRetChart');
+  if (!canvas) return;
+  if (sigRetChartInst) { sigRetChartInst.destroy(); sigRetChartInst = null; }
+
+  // Group by signal direction for color
+  const bullPoints = results.filter(r => r.signalDir > 0).map(r => ({ x: r.signalScore, y: r.nextRetBps }));
+  const bearPoints = results.filter(r => r.signalDir < 0).map(r => ({ x: r.signalScore, y: r.nextRetBps }));
+  const neutPoints = results.filter(r => r.signalDir === 0).map(r => ({ x: r.signalScore, y: r.nextRetBps }));
+
+  sigRetChartInst = new Chart(canvas, {
+    type: 'scatter',
+    data: {
+      datasets: [
+        { label: 'Bull Signal', data: bullPoints, backgroundColor: 'rgba(52,211,153,0.6)', pointRadius: 4 },
+        { label: 'Bear Signal', data: bearPoints, backgroundColor: 'rgba(251,113,133,0.6)', pointRadius: 4 },
+        { label: 'Neutral',     data: neutPoints, backgroundColor: 'rgba(113,113,122,0.4)', pointRadius: 3 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#71717a', font: { size: 9 } } } },
+      scales: {
+        x: { title: { display: true, text: 'Signal Score', color: '#71717a', font: { size: 9 } },
+             ticks: { color: '#71717a', font: { size: 9 } }, grid: { color: '#27272a' } },
+        y: { title: { display: true, text: 'Next Return (bps)', color: '#71717a', font: { size: 9 } },
+             ticks: { color: '#71717a', font: { size: 9 } }, grid: { color: '#27272a' } },
+      },
+    },
+  });
+}
+
+function renderRollingAccChart(rollingAccuracy) {
+  const canvas = $('rollingAccChart');
+  if (!canvas || !rollingAccuracy?.length) return;
+  if (rollingAccInst) { rollingAccInst.destroy(); rollingAccInst = null; }
+
+  const labels = rollingAccuracy.map(r => r.date?.slice(5) ?? '');
+  const values = rollingAccuracy.map(r => (r.accuracy * 100));
+  const colors = values.map(v => v >= 55 ? 'rgba(52,211,153,0.7)' : v < 45 ? 'rgba(251,113,133,0.7)' : 'rgba(113,113,122,0.5)');
+
+  rollingAccInst = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Accuracy %',
+        data: values,
+        backgroundColor: colors,
+        borderWidth: 0,
+        borderRadius: 2,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#71717a', font: { size: 8 }, maxRotation: 45 }, grid: { color: '#27272a' } },
+        y: { min: 0, max: 100,
+             ticks: { color: '#71717a', font: { size: 9 }, callback: v => v + '%' },
+             grid: { color: '#27272a' } },
+      },
+      annotation: {
+        annotations: { line50: { type: 'line', yMin: 50, yMax: 50, borderColor: '#52525b', borderWidth: 1, borderDash: [4, 4] } }
+      },
+    },
+  });
+}
+
+function renderAlerts(alerts) {
+  const el = $('alertsList');
+  if (!el) return;
+  if (!alerts?.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:10px;padding:4px 0">No alerts yet</div>';
+    return;
+  }
+  el.innerHTML = alerts.slice(0, 20).map(a => `
+    <div class="alert-item">
+      <span class="alert-${a.severity}">[${a.type}]</span>
+      <span style="color:var(--text);margin-left:5px">${a.message}</span>
+      <div style="color:var(--muted);font-size:9px;margin-top:2px;font-family:var(--mono)">${a.timestamp?.slice(0,19).replace('T',' ')}</div>
+    </div>`).join('');
+}
+
+async function loadData() {
+  const symbol   = $('symbolSelect')?.value   ?? 'SPY';
+  const lookback = $('lookbackSelect')?.value ?? '30';
+  setStatus(false);
+
+  try {
+    const [btRes, alertRes] = await Promise.all([
+      fetch(`/api/backtest?symbol=${symbol}&lookback=${lookback}`).then(r => r.json()),
+      fetch(`/api/alerts?limit=50`).then(r => r.json()),
+    ]);
+
+    if (!btRes.ok) throw new Error(btRes.error);
+    const bt = btRes.data;
+
+    if ($('computedAt')) $('computedAt').textContent = bt.computedAt?.slice(0,19).replace('T',' ') ?? '';
+    if ($('lastUpdate'))  $('lastUpdate').textContent  = new Date().toLocaleTimeString();
+
+    renderStats(bt);
+    renderTable(bt.results ?? []);
+    renderWeights(bt.signalWeights);
+    renderSigRetChart(bt.results ?? []);
+    renderRollingAccChart(bt.rollingAccuracy ?? []);
+    renderAlerts(alertRes.ok ? alertRes.data : []);
+
+    setStatus(true);
+  } catch (e) {
+    console.error('Backtest load error:', e);
+    setStatus(false);
+  }
+}
+
+// Init
+function init() {
+  // Restore symbol propagated by the SPA router across page transitions
+  if (window._routerSymbol) {
+    const s = $('symbolSelect');
+    if (s) s.value = window._routerSymbol;
+    delete window._routerSymbol;
+  }
+
+  // Clone only the lookbackSelect to strip stale listeners; symbolSelect is managed by ticker dropdown
+  const lb = $('lookbackSelect');
+  if (lb) lb.parentNode.replaceChild(lb.cloneNode(true), lb);
+  $('lookbackSelect')?.addEventListener('change', loadData);
+
+  window.initTickerDropdown(value => {
+    const sel = $('symbolSelect');
+    if (sel) sel.value = value;
+    loadData();
+  });
+
+  loadData();
+
+  // Register cleanup for SPA router (no timer here)
+  window._pageCleanup = () => {};
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</div>
+<canvas id="ambientCanvas" aria-hidden="true"></canvas>
+
+<!-- gauge.js needed when SPA-navigating to the Dashboard tab -->
+<script src="/js/gauge.js"></script>
+<script src="/js/logo.js"></script>
+<script src="/js/ticker.js"></script>
+<!-- SPA router: enables instant tab switching without full page reloads -->
+<script src="/js/router.js"></script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "market-bias-engine",
+  "version": "2.1.0",
+  "description": "Quantitative Market Bias Engine — GEX, HMM, Hurst, OU, VRP, TSMOM, COT, Kelly, CBOE",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --max-http-header-size=131072 server.js",
+    "dev":   "node --max-http-header-size=131072 --watch server.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

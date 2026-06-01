@@ -1,0 +1,9 @@
+node_modules/
+data/
+*.log
+.env
+.env.local
+.DS_Store
+*test_bias_out.json
+_audit.js
+_audit2.js

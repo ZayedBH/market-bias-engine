@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Market Bias Engine</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- Nav -->
+  <nav>
+    <a href="/" class="nav-brand">
+      <canvas id="radarLogo" width="28" height="28" aria-hidden="true"></canvas>
+      <span class="brand-text" data-text="BIAS ENGINE">BIAS ENGINE</span>
+    </a>
+    <div class="nav-links">
+      <a href="/" class="active">Dashboard</a>
+      <a href="/quant">Quant</a>
+      <a href="/backtest">Backtest</a>
+    </div>
+    <div class="nav-right">
+      <!-- Hidden native select — kept for app.js change-event compatibility -->
+      <select id="symbolSelect" style="display:none">
+        <option value="ES=F">ES=F</option><option value="NQ=F">NQ=F</option>
+        <option value="MES=F">MES=F</option><option value="MNQ=F">MNQ=F</option>
+        <option value="RTY=F">RTY=F</option><option value="YM=F">YM=F</option>
+        <option value="SPY">SPY</option><option value="QQQ">QQQ</option>
+        <option value="IWM">IWM</option><option value="AAPL">AAPL</option>
+        <option value="NVDA">NVDA</option><option value="TSLA">TSLA</option>
+        <option value="AMZN">AMZN</option><option value="META">META</option>
+        <option value="MSFT">MSFT</option><option value="GOOGL">GOOGL</option>
+      </select>
+      <!-- Custom terminal-styled dropdown -->
+      <div class="ticker-dropdown" id="tickerDropdown">
+        <button class="ticker-btn" id="tickerBtn" type="button">
+          <span id="tickerDisplay">SPY</span>
+          <svg class="ticker-chevron" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4"/></svg>
+        </button>
+        <div class="ticker-menu" id="tickerMenu">
+          <div class="ticker-group">
+            <div class="ticker-group-label">Futures</div>
+            <div class="ticker-option" data-value="ES=F">ES=F · E-mini S&amp;P 500</div>
+            <div class="ticker-option" data-value="NQ=F">NQ=F · E-mini Nasdaq-100</div>
+            <div class="ticker-option" data-value="MES=F">MES=F · Micro E-mini S&amp;P</div>
+            <div class="ticker-option" data-value="MNQ=F">MNQ=F · Micro E-mini NQ</div>
+            <div class="ticker-option" data-value="RTY=F">RTY=F · E-mini Russell</div>
+            <div class="ticker-option" data-value="YM=F">YM=F · E-mini Dow</div>
+          </div>
+          <div class="ticker-group">
+            <div class="ticker-group-label">ETFs</div>
+            <div class="ticker-option" data-value="SPY">SPY</div>
+            <div class="ticker-option" data-value="QQQ">QQQ</div>
+            <div class="ticker-option" data-value="IWM">IWM</div>
+          </div>
+          <div class="ticker-group">
+            <div class="ticker-group-label">Equities</div>
+            <div class="ticker-option" data-value="AAPL">AAPL</div>
+            <div class="ticker-option" data-value="NVDA">NVDA</div>
+            <div class="ticker-option" data-value="TSLA">TSLA</div>
+            <div class="ticker-option" data-value="AMZN">AMZN</div>
+            <div class="ticker-option" data-value="META">META</div>
+            <div class="ticker-option" data-value="MSFT">MSFT</div>
+            <div class="ticker-option" data-value="GOOGL">GOOGL</div>
+          </div>
+        </div>
+      </div>
+      <div class="status-dot" id="statusDot"></div>
+      <span style="font-size:10px;color:var(--muted)" id="lastUpdate">—</span>
+    </div>
+  </nav>
+
+  <!-- Main 3-column grid -->
+  <div class="main-grid">
+
+    <!-- LEFT: Bias gauge + pillars + key levels -->
+    <div class="panel">
+
+      <!-- Bias Gauge -->
+      <div class="panel-header">
+        <span class="panel-title">Composite Bias</span>
+        <span id="spotPrice" style="font-family:var(--mono);font-size:12px;color:var(--muted)">—</span>
+      </div>
+
+      <div class="gauge-wrap">
+        <canvas id="biasCanvas" width="440" height="260"></canvas>
+        <div class="gauge-meta">
+          <div class="gauge-score" id="gaugeScore">—</div>
+          <div class="gauge-label" id="gaugeLabel">LOADING</div>
+          <div class="gauge-ci" id="gaugeCI">90% CI: — to —</div>
+          <div class="gauge-confidence" id="gaugeConf">Confidence: —%</div>
+        </div>
+      </div>
+
+      <!-- Session directive card -->
+      <div class="directive-card" id="directiveCard">
+        <div class="directive-label">SESSION DIRECTIVE</div>
+        <div class="directive-text" id="directiveText">—</div>
+        <div class="directive-reason" id="directiveReason">Computing…</div>
+      </div>
+
+      <!-- Three-horizon sub-composites -->
+      <div id="threeHorizon"></div>
+
+      <!-- Kelly sizing -->
+      <div class="kelly-box">
+        <div class="panel-title" style="margin-bottom:8px">Kelly Position Size</div>
+        <div class="kelly-grid">
+          <div class="kelly-cell">
+            <span class="k-label">Direction</span>
+            <span class="k-value" id="kellyDir">—</span>
+          </div>
+          <div class="kelly-cell">
+            <span class="k-label">Risk %</span>
+            <span class="k-value bull" id="kellyRisk">—</span>
+          </div>
+          <div class="kelly-cell">
+            <span class="k-label">Win Prob</span>
+            <span class="k-value" id="kellyWP">—</span>
+          </div>
+          <div class="kelly-cell">
+            <span class="k-label">Full Kelly</span>
+            <span class="k-value text-muted" id="kellyFull">—</span>
+          </div>
+        </div>
+        <div class="kelly-rationale" id="kellyRationale">—</div>
+      </div>
+
+      <!-- Regime -->
+      <div class="regime-box">
+        <div class="panel-title" style="margin-bottom:8px">Market Regime</div>
+        <div class="regime-state">
+          <div class="regime-dot" id="regimeDot"></div>
+          <div>
+            <div class="regime-name" id="regimeName">—</div>
+            <div class="regime-conf" id="regimeConf">Confidence: —</div>
+          </div>
+        </div>
+        <div class="regime-bars" id="regimeBars"></div>
+      </div>
+
+      <!-- Pillar scores -->
+      <div class="panel-header" style="margin-top:0">
+        <span class="panel-title">Signal Pillars</span>
+        <span style="font-size:10px;color:var(--muted)" id="signalsFired">—/— signals</span>
+      </div>
+      <div id="pillarList"></div>
+
+    </div>
+
+    <!-- CENTER: GEX chart + signal log -->
+    <div class="panel">
+
+      <!-- Spot price + GEX header -->
+      <div class="panel-header">
+        <span class="panel-title">GEX Profile</span>
+        <div style="display:flex;gap:12px;align-items:center">
+          <span style="font-size:10px;color:var(--muted)">Gamma Flip:
+            <span class="text-warn" style="font-family:var(--mono)" id="gammaFlipVal">—</span>
+          </span>
+          <span style="font-size:10px;color:var(--muted)">Total GEX:
+            <span style="font-family:var(--mono)" id="totalGEXVal">—</span>
+          </span>
+          <span style="font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.06em;padding:2px 5px;border-radius:3px;border:0.5px solid var(--border2);color:var(--muted)" id="chainSourceBadge" title="Options data source">—</span>
+        </div>
+      </div>
+
+      <div class="gex-wrap">
+        <canvas id="gexChart"></canvas>
+      </div>
+
+      <!-- VIX term structure chart -->
+      <div class="panel-header">
+        <span class="panel-title">VIX Term Structure</span>
+        <span class="stat-badge" id="vixRegimeBadge" style="font-size:9px">—</span>
+      </div>
+      <div class="vix-chart-wrap">
+        <canvas id="vixChart"></canvas>
+      </div>
+
+      <!-- GEX Key stat row -->
+      <div class="panel-header" style="margin-top:0">
+        <span class="panel-title">Options Greeks Aggregates</span>
+      </div>
+      <div id="gexStats">
+        <div class="stat-row">
+          <span class="stat-label">Net GEX ($B)</span>
+          <span class="stat-value" id="statNetGEX">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Net DEX ($B)</span>
+          <span class="stat-value" id="statNetDEX">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Net VEX</span>
+          <span class="stat-value" id="statNetVEX">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">25Δ Risk Reversal</span>
+          <span class="stat-value" id="statRR">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">VIX9D / VIX / VIX3M</span>
+          <span class="stat-value" id="statVIXTerms">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Vol Risk Premium</span>
+          <span class="stat-value" id="statVRP">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Hurst Exponent (20d)</span>
+          <span class="stat-value" id="statHurst">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">TSMOM (1M/3M/6M)</span>
+          <span class="stat-value" id="statTSMOM">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">OFI Z-Score</span>
+          <span class="stat-value" id="statOFI">—</span>
+        </div>
+      </div>
+
+      <!-- Signal log -->
+      <div class="panel-header">
+        <span class="panel-title">Signal Detail</span>
+        <span style="font-size:10px;color:var(--muted)" id="compAt">—</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="signal-table">
+          <thead>
+            <tr>
+              <th>Cat</th>
+              <th>Signal</th>
+              <th>Score</th>
+              <th>Wt%</th>
+              <th>Detail</th>
+            </tr>
+          </thead>
+          <tbody id="signalLog"></tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- RIGHT: Key levels + macro stats -->
+    <div class="panel">
+
+      <div class="panel-header">
+        <span class="panel-title">Key Levels</span>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--text)" id="spotRight">—</span>
+      </div>
+      <div id="keyLevels"></div>
+
+      <div class="panel-header" style="margin-top:0">
+        <span class="panel-title">Market Stats</span>
+      </div>
+      <div id="macroStats">
+        <div class="stat-row">
+          <span class="stat-label">VVIX</span>
+          <span class="stat-value" id="statVVIX">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">SKEW Index</span>
+          <span class="stat-value" id="statSKEW">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">GEX Regime</span>
+          <span class="stat-value" id="statGEXRegime">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">DEX Bias</span>
+          <span class="stat-value" id="statDEXBias">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">VEX Signal</span>
+          <span class="stat-value" id="statVEXSignal">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Expiry Week</span>
+          <span class="stat-value" id="statExpiry">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">CHEX Drift</span>
+          <span class="stat-value" id="statCHEX">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Max Pain</span>
+          <span class="stat-value" id="statMaxPain">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Call Wall</span>
+          <span class="stat-value" id="statCallWall">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Put Wall</span>
+          <span class="stat-value" id="statPutWall">—</span>
+        </div>
+      </div>
+
+      <div class="panel-header">
+        <span class="panel-title">Cross-Asset TSMOM</span>
+      </div>
+      <div id="crossAssetList" style="padding:12px 16px">
+        <div style="color:var(--muted);font-size:11px">Loading…</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Ambient particle field — behind all content -->
+<canvas id="ambientCanvas" aria-hidden="true"></canvas>
+
+<!-- Loading overlay -->
+<div id="loadingOverlay">
+  <div class="loader-ring"></div>
+  <span class="loader-text">Fetching market data</span>
+</div>
+
+<!-- Toast notification -->
+<div id="updateToast"></div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="/js/animations.js"></script>
+<script src="/js/gauge.js"></script>
+<script src="/js/logo.js"></script>
+<script src="/js/ticker.js"></script>
+<script src="/js/app.js"></script>
+<!-- SPA router: enables instant tab switching without full page reloads -->
+<script src="/js/router.js"></script>
+</body>
+</html>
